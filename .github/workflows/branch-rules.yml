@@ -1,0 +1,40 @@
+# 브랜치 이름과 PR 대상 검사 (docs/CONTRIBUTING.md 3절)
+# 항목 브랜치 <종류>/<ID>-<주제> 는 main으로, 분기 브랜치 <항목 브랜치>__<부분> 은 그 항목 브랜치로 보낸다.
+name: branch-rules
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
+
+jobs:
+  branch-rules:
+    name: branch-rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: 브랜치 이름과 대상 확인
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          ID='(dh|ms|mj|un)-[0-9]{2}'
+          T='(feat|fix|docs|test|chore|refactor)'
+          S='[a-z0-9][a-z0-9-]*'
+          if [[ "$HEAD_REF" =~ ^$T/$ID-$S$ ]]; then
+            if [[ "$BASE_REF" != "main" ]]; then
+              echo "::error::항목 브랜치 '$HEAD_REF' 의 PR은 main 으로 보내야 한다(지금 '$BASE_REF')."
+              exit 1
+            fi
+          elif [[ "$HEAD_REF" =~ ^($T/$ID-$S)__$S$ ]]; then
+            PARENT="${BASH_REMATCH[1]}"
+            if [[ "$BASE_REF" != "$PARENT" ]]; then
+              echo "::error::분기 브랜치 '$HEAD_REF' 의 PR은 항목 브랜치 '$PARENT' 로 보내야 한다(지금 '$BASE_REF')."
+              exit 1
+            fi
+          else
+            echo "::error::브랜치 이름 '$HEAD_REF' 이 규칙과 다르다. <종류>/<ID>-<주제> 또는 <항목 브랜치>__<부분> (CONTRIBUTING.md 3절)."
+            exit 1
+          fi
+          echo "통과: $HEAD_REF → $BASE_REF"

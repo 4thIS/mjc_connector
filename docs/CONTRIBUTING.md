@@ -7,7 +7,7 @@
 
 - 리포: `https://github.com/4thIS/hackathon_mjc_mcp.git` (기존 MCP 서버). 11/6까지의 공지·학사일정·도서관·테스트 작업은 모두 여기서 한다. [확인: origin 주소]
 - 시작 기준 브랜치는 `origin/main`이다. 원격 서버 파일(Dockerfile 등)은 아직 `main`에 없다. 진행도 항목이 그 파일을 건드리라고 하지 않는 한 신경 쓰지 않아도 된다. [확인]
-- `main`은 PR을 거치지 않고는 바뀌지 않게 설정되어 있다(직접 push, 강제 push, 삭제 불가). [확인: 리포 규칙 "Main"]
+- 두 리포(`hackathon_mjc_mcp`, `mjc_connector`) 모두 `main`은 PR을 거치지 않고는 바뀌지 않게 설정되어 있다(직접 push, 강제 push, 삭제 불가). [확인: 리포 규칙 "Main"]
 
 ## 2. 환경 준비
 
@@ -52,6 +52,7 @@ feat/ms-01-notice-filter__since ─PR→  ┘
 ```
 
 - 진행도에 없는 일은 브랜치를 만들기 전에 팀장에게 새 항목을 요청한다.
+- PR을 올리면 `branch-rules` 검사가 자동으로 돈다. 브랜치 이름이나 PR 대상이 규칙과 다르면 실패하고, 실패한 PR은 `main`에 머지할 수 없다.
 
 ## 4. 한 작업의 흐름
 
