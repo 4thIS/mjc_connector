@@ -60,6 +60,7 @@ def load_items(path: Path) -> dict[str, dict]:
             "kind": field("구분") or "",
             "deps": LOOKS_LIKE_ID.findall(field("선행") or ""),
             "manual_done": field("완료"),
+            "moved_to": field("이동"),
             "pr_links": re.findall(r"(?:([\w.-]+/[\w.-]+))?#(\d+)", field("PR") or ""),
             "prs": [],
             "branch": False,
@@ -86,6 +87,9 @@ def attach(items: dict, repos: list[str]) -> list[str]:
             if m and m.group(1) in items:
                 items[m.group(1)]["branch"] = True
         for pr in prs:
+            if pr["state"] == "CLOSED":  # 머지 없이 닫힌 PR은 상태에도 위반에도 쓰지 않는다
+                continue
+            is_open = pr["state"] == "OPEN"
             head, base, ref = pr["headRefName"], pr["baseRefName"], f"{repo}#{pr['number']}"
             item_m, sub_m = ITEM_BRANCH.match(head), SUB_BRANCH.match(head)
             ids: set[str] = set()
@@ -93,14 +97,14 @@ def attach(items: dict, repos: list[str]) -> list[str]:
             if item_m:
                 ids.add(item_m.group(1))
                 role = "item"
-                if base != default:
+                if base != default and is_open:
                     violations.append(f"{ref}: 항목 브랜치 `{head}`의 PR은 `{default}`로 보내야 한다(지금 `{base}`)")
             elif sub_m:
                 ids.add(sub_m.group(2))
                 role = "sub"
-                if base != sub_m.group(1):
+                if base != sub_m.group(1) and is_open:
                     violations.append(f"{ref}: 분기 브랜치 `{head}`의 PR은 항목 브랜치 `{sub_m.group(1)}`로 보내야 한다(지금 `{base}`)")
-            elif LOOKS_LIKE_ID.search(head) and pr["state"] == "OPEN":
+            elif LOOKS_LIKE_ID.search(head) and is_open:
                 violations.append(f"{ref}: 브랜치 이름 `{head}`이 규칙(`<종류>/<ID>-<주제>` 또는 `…__<부분>`)과 다르다")
             body_ids = re.search(rf"진행도:\s*((?:{ID}[,\s]*)+)", pr.get("body") or "")
             if body_ids:
@@ -113,10 +117,32 @@ def attach(items: dict, repos: list[str]) -> list[str]:
                         role = role or "item"
             for item_id in ids:
                 if item_id not in items:
-                    if pr["state"] == "OPEN":
+                    if is_open:
                         violations.append(f"{ref}: `{item_id}`가 진행도에 없다")
                     continue
                 items[item_id]["prs"].append({**pr, "role": role, "to_default": base == default})
+    return violations
+
+
+def resolve(items: dict, item_id: str) -> str:
+    """이동 표기를 따라가 실제로 일이 진행되는 항목 ID를 돌려준다."""
+    seen = set()
+    while item_id in items and items[item_id]["moved_to"] and item_id not in seen:
+        seen.add(item_id)
+        target = LOOKS_LIKE_ID.search(items[item_id]["moved_to"])
+        if not target:
+            break
+        item_id = target.group(0)
+    return item_id
+
+
+def check_moves(items: dict) -> list[str]:
+    violations = []
+    for item_id, item in items.items():
+        if item["moved_to"]:
+            target = LOOKS_LIKE_ID.search(item["moved_to"])
+            if not target or target.group(0) not in items:
+                violations.append(f"`{item_id}`의 이동 대상 `{item['moved_to']}`이 진행도에 없다")
     return violations
 
 
@@ -125,7 +151,9 @@ def status(items: dict, item_id: str, memo: dict) -> str:
         return memo[item_id]
     item = items[item_id]
     prs = item["prs"]
-    if item["kind"].startswith("범위 밖"):
+    if item["moved_to"]:
+        result = f"이동({item['moved_to']})"
+    elif item["kind"].startswith("범위 밖"):
         result = "보류"
     elif item["manual_done"] or any(p["state"] == "MERGED" and p["role"] == "item" and p["to_default"] for p in prs):
         result = "완료"
@@ -137,7 +165,8 @@ def status(items: dict, item_id: str, memo: dict) -> str:
         result = "작업 중"
     else:
         memo[item_id] = "…"  # 순환 방지
-        waiting = [d for d in item["deps"] if d in items and status(items, d, memo) != "완료"]
+        deps = [resolve(items, d) for d in item["deps"]]  # 옮겨진 선행은 옮겨 간 항목으로 판단한다
+        waiting = [d for d in dict.fromkeys(deps) if d in items and status(items, d, memo) != "완료"]
         result = "시작 가능" if not waiting else "선행 대기(" + ", ".join(waiting) + ")"
     memo[item_id] = result
     return result
@@ -169,7 +198,7 @@ def main() -> int:
     args = parser.parse_args()
 
     items = load_items(args.file)
-    violations = attach(items, args.repo or DEFAULT_REPOS)
+    violations = check_moves(items) + attach(items, args.repo or DEFAULT_REPOS)
     block = render(items)
 
     if args.write:
