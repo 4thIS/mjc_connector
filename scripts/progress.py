@@ -124,6 +124,28 @@ def attach(items: dict, repos: list[str]) -> list[str]:
     return violations
 
 
+def resolve(items: dict, item_id: str) -> str:
+    """이동 표기를 따라가 실제로 일이 진행되는 항목 ID를 돌려준다."""
+    seen = set()
+    while item_id in items and items[item_id]["moved_to"] and item_id not in seen:
+        seen.add(item_id)
+        target = LOOKS_LIKE_ID.search(items[item_id]["moved_to"])
+        if not target:
+            break
+        item_id = target.group(0)
+    return item_id
+
+
+def check_moves(items: dict) -> list[str]:
+    violations = []
+    for item_id, item in items.items():
+        if item["moved_to"]:
+            target = LOOKS_LIKE_ID.search(item["moved_to"])
+            if not target or target.group(0) not in items:
+                violations.append(f"`{item_id}`의 이동 대상 `{item['moved_to']}`이 진행도에 없다")
+    return violations
+
+
 def status(items: dict, item_id: str, memo: dict) -> str:
     if item_id in memo:
         return memo[item_id]
@@ -143,7 +165,8 @@ def status(items: dict, item_id: str, memo: dict) -> str:
         result = "작업 중"
     else:
         memo[item_id] = "…"  # 순환 방지
-        waiting = [d for d in item["deps"] if d in items and status(items, d, memo) != "완료"]
+        deps = [resolve(items, d) for d in item["deps"]]  # 옮겨진 선행은 옮겨 간 항목으로 판단한다
+        waiting = [d for d in dict.fromkeys(deps) if d in items and status(items, d, memo) != "완료"]
         result = "시작 가능" if not waiting else "선행 대기(" + ", ".join(waiting) + ")"
     memo[item_id] = result
     return result
@@ -175,7 +198,7 @@ def main() -> int:
     args = parser.parse_args()
 
     items = load_items(args.file)
-    violations = attach(items, args.repo or DEFAULT_REPOS)
+    violations = check_moves(items) + attach(items, args.repo or DEFAULT_REPOS)
     block = render(items)
 
     if args.write:
