@@ -143,6 +143,14 @@ def check_moves(items: dict) -> list[str]:
             target = LOOKS_LIKE_ID.search(item["moved_to"])
             if not target or target.group(0) not in items:
                 violations.append(f"`{item_id}`의 이동 대상 `{item['moved_to']}`이 진행도에 없다")
+                continue
+            chain, current = [item_id], target.group(0)
+            while current in items and items[current]["moved_to"] and current not in chain:
+                chain.append(current)
+                nxt = LOOKS_LIKE_ID.search(items[current]["moved_to"])
+                current = nxt.group(0) if nxt else ""
+            if current == item_id:
+                violations.append(f"`{item_id}`의 이동이 순환한다({' → '.join(chain + [item_id])})")
     return violations
 
 
@@ -165,8 +173,11 @@ def status(items: dict, item_id: str, memo: dict) -> str:
         result = "작업 중"
     else:
         memo[item_id] = "…"  # 순환 방지
-        deps = [resolve(items, d) for d in item["deps"]]  # 옮겨진 선행은 옮겨 간 항목으로 판단한다
-        waiting = [d for d in dict.fromkeys(deps) if d in items and status(items, d, memo) != "완료"]
+        deps: dict[str, str] = {}  # 옮겨진 선행은 옮겨 간 항목으로 판단하고, 표시는 "원래→옮겨 간" 형태로 한다
+        for d in item["deps"]:
+            deps.setdefault(resolve(items, d), d)
+        waiting = [d if d == orig else f"{orig}→{d}" for d, orig in deps.items()
+                   if d in items and status(items, d, memo) != "완료"]
         result = "시작 가능" if not waiting else "선행 대기(" + ", ".join(waiting) + ")"
     memo[item_id] = result
     return result
