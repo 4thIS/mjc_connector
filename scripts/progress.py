@@ -60,7 +60,6 @@ def load_items(path: Path) -> dict[str, dict]:
             "kind": field("구분") or "",
             "deps": LOOKS_LIKE_ID.findall(field("선행") or ""),
             "manual_done": field("완료"),
-            "moved_to": field("이동"),
             "pr_links": re.findall(r"(?:([\w.-]+/[\w.-]+))?#(\d+)", field("PR") or ""),
             "prs": [],
             "branch": False,
@@ -124,44 +123,12 @@ def attach(items: dict, repos: list[str]) -> list[str]:
     return violations
 
 
-def resolve(items: dict, item_id: str) -> str:
-    """이동 표기를 따라가 실제로 일이 진행되는 항목 ID를 돌려준다."""
-    seen = set()
-    while item_id in items and items[item_id]["moved_to"] and item_id not in seen:
-        seen.add(item_id)
-        target = LOOKS_LIKE_ID.search(items[item_id]["moved_to"])
-        if not target:
-            break
-        item_id = target.group(0)
-    return item_id
-
-
-def check_moves(items: dict) -> list[str]:
-    violations = []
-    for item_id, item in items.items():
-        if item["moved_to"]:
-            target = LOOKS_LIKE_ID.search(item["moved_to"])
-            if not target or target.group(0) not in items:
-                violations.append(f"`{item_id}`의 이동 대상 `{item['moved_to']}`이 진행도에 없다")
-                continue
-            chain, current = [item_id], target.group(0)
-            while current in items and items[current]["moved_to"] and current not in chain:
-                chain.append(current)
-                nxt = LOOKS_LIKE_ID.search(items[current]["moved_to"])
-                current = nxt.group(0) if nxt else ""
-            if current == item_id:
-                violations.append(f"`{item_id}`의 이동이 순환한다({' → '.join(chain + [item_id])})")
-    return violations
-
-
 def status(items: dict, item_id: str, memo: dict) -> str:
     if item_id in memo:
         return memo[item_id]
     item = items[item_id]
     prs = item["prs"]
-    if item["moved_to"]:
-        result = f"이동({item['moved_to']})"
-    elif item["kind"].startswith("범위 밖"):
+    if item["kind"].startswith("범위 밖"):
         result = "보류"
     elif item["manual_done"] or any(p["state"] == "MERGED" and p["role"] == "item" and p["to_default"] for p in prs):
         result = "완료"
@@ -173,11 +140,7 @@ def status(items: dict, item_id: str, memo: dict) -> str:
         result = "작업 중"
     else:
         memo[item_id] = "…"  # 순환 방지
-        deps: dict[str, str] = {}  # 옮겨진 선행은 옮겨 간 항목으로 판단하고, 표시는 "원래→옮겨 간" 형태로 한다
-        for d in item["deps"]:
-            deps.setdefault(resolve(items, d), d)
-        waiting = [d if d == orig else f"{orig}→{d}" for d, orig in deps.items()
-                   if d in items and status(items, d, memo) != "완료"]
+        waiting = [d for d in item["deps"] if d in items and status(items, d, memo) != "완료"]
         result = "시작 가능" if not waiting else "선행 대기(" + ", ".join(waiting) + ")"
     memo[item_id] = result
     return result
@@ -209,7 +172,7 @@ def main() -> int:
     args = parser.parse_args()
 
     items = load_items(args.file)
-    violations = check_moves(items) + attach(items, args.repo or DEFAULT_REPOS)
+    violations = attach(items, args.repo or DEFAULT_REPOS)
     block = render(items)
 
     if args.write:
