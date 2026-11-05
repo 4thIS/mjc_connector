@@ -7,6 +7,7 @@ AI(호스트)는 공지에서 조건을 뽑아 근거(본문 인용 또는 "이�
 evaluate()는 네트워크를 쓰지 않는 순수 함수다. 프로필은 인자로만 받고 저장·로그하지 않는다.
 """
 
+import re
 import unicodedata
 from datetime import date
 from typing import Literal
@@ -118,6 +119,16 @@ def _source(condition: _Evidence, body: str) -> Source:
     return "unverified_quote"
 
 
+def _quote_has_date(quote: str, value: date) -> bool:
+    """인용에 값의 월·일이 들어 있는지 본다(명세 3절 9번 B 방식).
+
+    `10월 31일`, `10.31`, `10/31`, `2026-10-31`, `11. 6.`처럼 월 다음에 구분자와 일이 오는
+    표기를 인정한다. 앞뒤가 숫자인 경우(10.31 안의 10.3)는 일치로 보지 않는다.
+    """
+    pattern = rf"(?<!\d)0?{value.month}\s*(?:월|[./-])\s*0?{value.day}(?!\d)"
+    return re.search(pattern, unicodedata.normalize("NFKC", quote)) is not None
+
+
 def _evidence(condition: _Evidence, source: Source, note: str = "") -> str:
     if source == "text_quote":
         return condition.quote or ""
@@ -166,6 +177,15 @@ def _date(name: str, condition: DateCondition, today: date, body: str) -> Reason
             result="unknown",
             source=source,
             evidence="근거 인용이 공지 본문에서 확인되지 않아 판정에 쓰지 않았습니다.",
+        )
+    # 본문에 있는 인용이라도 그 안에 이 날짜가 없으면 다른 날짜를 근거로 댄 것이다.
+    # 이미지에서 읽은 값은 본문 근거가 없으므로 대조하지 않는다.
+    if source == "text_quote" and not _quote_has_date(condition.quote or "", condition.value):
+        return Reason(
+            field=name,
+            result="unknown",
+            source="unverified_quote",
+            evidence="근거 인용에 이 날짜가 들어 있지 않아 판정에 쓰지 않았습니다.",
         )
     if name == "apply_start":
         result: Result = "not_yet" if condition.value > today else "match"

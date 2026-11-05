@@ -72,6 +72,53 @@ def test_t05_not_yet_open_does_not_change_verdict():
     assert _reason(v, "apply_start").result == "not_yet"
 
 
+def test_t05b_unverifiable_start_date_is_ignored_in_verdict():
+    """apply_start 인용에 그 날짜가 없으면 unknown이지만 판정에는 쓰지 않는다."""
+    v = _run(_extraction(apply_start={"value": "2026-10-16", "quote": "2026.10.15"}))
+    assert v.verdict == "가능"
+    r = _reason(v, "apply_start")
+    assert (r.result, r.source) == ("unknown", "unverified_quote")
+    assert v.confidence == "verified"
+
+
+def test_t16c_deadline_quote_without_that_date_is_not_trusted():
+    """B 방식: 인용(본문에 있음)에 값의 월·일이 없으면 날짜를 믿지 않는다."""
+    v = _run(_extraction(apply_end={"value": "2026-11-06", "quote": "2026.10.31"}))
+    assert v.verdict == "확인 필요"
+    r = _reason(v, "apply_end")
+    assert (r.result, r.source) == ("unknown", "unverified_quote")
+    assert v.deadline is None
+
+
+@pytest.mark.parametrize(
+    ("body_date", "value"),
+    [
+        ("2026.10.31", "2026-10-31"),
+        ("10월 31일", "2026-10-31"),
+        ("10/31", "2026-10-31"),
+        ("2026-10-31", "2026-10-31"),
+        ("26.10.31.(금) 18시", "2026-10-31"),
+        ("11. 6.(금)", "2026-11-06"),
+        ("11월 06일", "2026-11-06"),
+    ],
+)
+def test_t16c_accepts_common_korean_date_formats(body_date, value):
+    body = BODY.replace("2026.10.31", body_date)
+    v = _run(_extraction(apply_end={"value": value, "quote": body_date}), body=body, today=date(2026, 10, 1))
+    assert _reason(v, "apply_end").source == "text_quote"
+
+
+def test_t16c_does_not_match_day_inside_a_longer_number():
+    """10/3을 찾을 때 10.31을 일치로 보지 않는다."""
+    v = _run(_extraction(apply_end={"value": "2026-10-03", "quote": "2026.10.31"}), today=date(2026, 10, 1))
+    assert _reason(v, "apply_end").source == "unverified_quote"
+
+
+def test_t16c_image_dates_are_not_cross_checked():
+    v = _run(_extraction(apply_end={"value": "2026-11-06", "from_image": True}))
+    assert _reason(v, "apply_end").source == "image_read"
+
+
 def test_t06_status_mismatch_is_rejected():
     body = BODY.replace("재학생", "휴학생")
     v = _run(_extraction(statuses={"value": ["휴학"], "quote": "휴학생"}), body=body)
