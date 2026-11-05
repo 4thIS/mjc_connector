@@ -19,7 +19,7 @@ python -m venv .venv
 .venv/Scripts/python -m pytest tests/ -q
 ```
 
-- 마지막 명령이 **106 passed**여야 시작할 수 있다. 근거: 2026-10-18 로컬 브랜치에서 106 passed를 확인했고, 그 브랜치와 `origin/main`의 `tests/`는 동일하다. [확인] 다만 `origin/main`을 새로 clone해 돌린 결과는 아니다. PR #15(요청 간격 잠금)가 머지되면 테스트가 2개 늘어 **108 passed**가 된다. [확인: #15 위에서 실행] 106과 108 외의 숫자가 나오면 작업 전에 알려 달라.
+- 마지막 명령이 **failed 없이 모두 passed**여야 시작할 수 있다. 통과 개수는 `main`에 PR이 머지될 때마다 늘어나므로 정해진 숫자는 없다. 실패가 하나라도 나오면 작업 전에 알려 달라.
 - 학교 로그인이 필요한 도구(`search_courses`, `get_syllabus`)와 `auth/login_helper.py`는 이번 작업에 쓰지 않는다.
 
 ## 3. 브랜치 규칙
@@ -83,7 +83,10 @@ feat/ms-01-notice-filter__since ─PR→  ┘
 - 에러는 `common/errors.py`의 `ToolError` 계열을 쓴다. 원문 HTML·헤더·쿠키를 에러에 담지 않는다.
 - 도구 반환값은 dict가 아니라 Pydantic `BaseModel`이다. 필드마다 `Field(description=...)`을 쓴다.
 - 도구 등록 방식과 `register()`는 건드리지 않는다. 같은 줄을 수정하는 브랜치가 따로 있어 충돌한다. [확인: `title=` 커밋이 `register()`를 바꿨다]
-- 테스트 fixture는 실제 응답을 **bytes 원본**으로 저장한다(텍스트로 저장하면 인코딩 버그가 숨는다).
+- 테스트 fixture는 실제 응답을 **bytes 원본**으로 저장한다(텍스트로 저장하면 인코딩 버그가 숨는다). 단, 공개 저장소이므로 두 가지만 바꿔 저장한다.
+  - 세션 ID: `;jsessionid=<값>` → `;jsessionid=MASKED`
+  - `@mjc.ac.kr` 이메일 → `masked@example.com`
+  - 학교 대표·부서 전화번호는 공개된 기관 연락처라 그대로 둔다. 바꾼 뒤 전체 테스트를 다시 돌린다.
 
 ## 7. 커밋과 푸시
 
