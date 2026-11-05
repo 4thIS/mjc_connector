@@ -1,16 +1,22 @@
 """MCP 도구 evaluate_eligibility. 본문은 서버가 직접 다시 가져온다(호스트가 넘긴 본문은 쓰지 않는다)."""
 
 from datetime import date, datetime, timedelta, timezone
+from typing import Annotated
 
 from mcp.types import ToolAnnotations
+from pydantic import WithJsonSchema
 
 from mjc_connector.eligibility import Extraction, Profile, Verdict, evaluate, parse_profile
 from tools import notices
 
 KST = timezone(timedelta(hours=9))
 
+# 입력 스키마는 Profile 모델에서 만들되, 검증은 SDK가 아니라 parse_profile이 한다.
+# SDK 검증 오류는 입력값을 그대로 되풀이하므로 프로필 값이 오류 문구에 남는다(명세 1절 입력 형태).
+ProfileArg = Annotated[dict, WithJsonSchema(Profile.model_json_schema())]
 
-def evaluate_eligibility(notice_id: str, profile: Profile, extraction: Extraction) -> Verdict:
+
+def evaluate_eligibility(notice_id: str, profile: ProfileArg, extraction: Extraction) -> Verdict:
     """학교 공지가 이 학생에게 해당되는지 판정한다. 판정은 이 도구(코드)가 한다.
 
     쓰는 순서:
@@ -31,7 +37,7 @@ def evaluate_eligibility(notice_id: str, profile: Profile, extraction: Extractio
     판정이 보는 것은 대상 학년·학과·재학 상태와 신청 기간뿐이다. 공지에 그 밖의 조건(소득, 나이,
     자격증, 증명서 등)이 있으면 판정에 들어가지 않으므로, "가능"이어도 그 조건을 따로 알려 준다.
     """
-    checked = parse_profile(profile.model_dump())
+    checked = parse_profile(profile)
     detail = notices.get_notice(notice_id)  # 조회 실패는 ToolError로 올라간다(판정을 지어내지 않는다)
     try:
         posted_on = date.fromisoformat(detail.posted_on)
