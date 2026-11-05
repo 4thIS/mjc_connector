@@ -60,7 +60,6 @@ def load_items(path: Path) -> dict[str, dict]:
             "kind": field("구분") or "",
             "deps": LOOKS_LIKE_ID.findall(field("선행") or ""),
             "manual_done": field("완료"),
-            "moved_to": field("이동"),
             "pr_links": re.findall(r"(?:([\w.-]+/[\w.-]+))?#(\d+)", field("PR") or ""),
             "prs": [],
             "branch": False,
@@ -129,9 +128,7 @@ def status(items: dict, item_id: str, memo: dict) -> str:
         return memo[item_id]
     item = items[item_id]
     prs = item["prs"]
-    if item["moved_to"]:
-        result = f"이동({item['moved_to']})"
-    elif item["kind"].startswith("범위 밖"):
+    if item["kind"].startswith("범위 밖"):
         result = "보류"
     elif item["manual_done"] or any(p["state"] == "MERGED" and p["role"] == "item" and p["to_default"] for p in prs):
         result = "완료"
