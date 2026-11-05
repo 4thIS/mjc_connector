@@ -10,7 +10,7 @@ evaluate()는 네트워크를 쓰지 않는 순수 함수다. 프로필은 인�
 import re
 import unicodedata
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -42,14 +42,19 @@ class _Evidence(BaseModel):
     )
 
 
+# 빈 목록은 뜻이 정해지지 않아 입력 오류로 거절한다. 못 찾은 값은 null이다(명세 2절).
+_Grades = Annotated[list[int], Field(min_length=1)]
+_Names = Annotated[list[str], Field(min_length=1)]
+
+
 class GradeCondition(_Evidence):
-    value: list[int] | Literal["ANY"] | None = Field(
+    value: _Grades | Literal["ANY"] | None = Field(
         default=None, description='대상 학년 목록. 학년 제한이 없다고 적혀 있으면 "ANY". 못 찾으면 null'
     )
 
 
 class NameCondition(_Evidence):
-    value: list[str] | Literal["ANY"] | None = Field(
+    value: _Names | Literal["ANY"] | None = Field(
         default=None, description='대상 목록. 제한이 없다고 적혀 있으면 "ANY". 못 찾으면 null'
     )
 
@@ -151,11 +156,12 @@ def _membership(
                 evidence="허용된 값 목록에 없는 표현이라 판정에 쓰지 않았습니다.",
             )
     source = _source(condition, body)
-    if source == "unverified_quote":
+    # "ANY"(제한 없음)는 본문에서 확인된 인용이 있을 때만 인정한다. 이미지에서 읽은 "ANY"도 쓰지 않는다.
+    if source == "unverified_quote" or (condition.value == "ANY" and source != "text_quote"):
         return Reason(
             field=name,
             result="unknown",
-            source=source,
+            source="unverified_quote",
             evidence="근거 인용이 공지 본문에서 확인되지 않아 판정에 쓰지 않았습니다.",
         )
     matched = condition.value == "ANY" or actual in condition.value

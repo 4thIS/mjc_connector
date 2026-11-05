@@ -6,6 +6,7 @@
 from datetime import date
 
 import pytest
+from pydantic import ValidationError
 
 from common.errors import ToolError
 from mjc_connector.eligibility import Extraction, evaluate, parse_profile
@@ -254,3 +255,31 @@ def test_errors_do_not_echo_profile_values():
     with pytest.raises(ToolError) as info:
         parse_profile({**PROFILE, "department": "비밀학과"})
     assert "비밀학과" not in str(info.value)
+
+
+def test_t27_any_from_image_without_body_quote_is_not_trusted():
+    """이미지에서 읽은 "ANY"는 인정하지 않는다. "ANY"는 본문에서 확인된 인용이 있을 때만 일치다."""
+    v = _run(_extraction(departments={"value": "ANY", "from_image": True}))
+    assert v.verdict == "확인 필요"
+    r = _reason(v, "departments")
+    assert (r.result, r.source) == ("unknown", "unverified_quote")
+
+
+def test_t27_any_with_quote_not_in_body_and_from_image_is_not_trusted():
+    v = _run(_extraction(departments={"value": "ANY", "quote": "포스터의 전 학과", "from_image": True}))
+    assert _reason(v, "departments").source == "unverified_quote"
+
+
+def test_t28_quote_not_in_body_with_from_image_is_an_image_value():
+    """본문에 없는 인용이라도 from_image가 true면 이미지에서 읽은 값으로 쓴다(3절 4번 우선)."""
+    v = _run(_extraction(grades={"value": [3], "quote": "3학년 재학생(포스터)", "from_image": True}))
+    r = _reason(v, "grades")
+    assert (r.result, r.source) == ("mismatch", "image_read")
+    assert v.verdict == "확인 필요"
+
+
+@pytest.mark.parametrize("field", ["grades", "departments", "statuses"])
+def test_t29_empty_list_is_an_input_error(field):
+    """빈 목록은 뜻이 정해지지 않은 입력이라 거절한다. 못 찾은 값은 null로 보낸다."""
+    with pytest.raises(ValidationError):
+        _extraction(**{field: {"value": [], "quote": "2학년"}})

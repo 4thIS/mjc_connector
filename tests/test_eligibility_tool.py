@@ -133,3 +133,15 @@ def test_unknown_department_in_tool_is_an_error(monkeypatch):
         tool.evaluate_eligibility(
             "169:BM1:BD1", Profile(department="정통과", grade=2, status="재학"), EXTRACTION
         )
+
+
+def test_t29_empty_list_through_mcp_is_a_tool_error(monkeypatch):
+    result = _call_through_mcp(
+        monkeypatch,
+        {"notice_id": _ID, "profile": {"department": "비밀학과", "grade": 2, "status": "재학"},
+         "extraction": {"grades": {"value": [], "quote": "2학년"}}},
+    )
+    text = result.content[0].text
+    assert result.is_error
+    assert "extraction.grades.value" in text
+    assert "비밀학과" not in text
