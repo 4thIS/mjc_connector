@@ -135,13 +135,14 @@ def test_unknown_department_in_tool_is_an_error(monkeypatch):
         )
 
 
-def test_t29_empty_list_through_mcp_is_a_tool_error(monkeypatch):
+@pytest.mark.parametrize("field", ["grades", "departments", "statuses"])
+def test_t29_empty_list_through_mcp_is_a_tool_error(monkeypatch, field):
     result = _call_through_mcp(
         monkeypatch,
         {"notice_id": _ID, "profile": {"department": "비밀학과", "grade": 2, "status": "재학"},
-         "extraction": {"grades": {"value": [], "quote": "2학년"}}},
+         "extraction": {field: {"value": [], "quote": "비밀인용"}}},
     )
     text = result.content[0].text
     assert result.is_error
-    assert "extraction.grades.value" in text
-    assert "비밀학과" not in text
+    assert f"extraction.{field}.value" in text
+    assert "비밀학과" not in text and "비밀인용" not in text

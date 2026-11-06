@@ -283,3 +283,11 @@ def test_t29_empty_list_is_an_input_error(field):
     """빈 목록은 뜻이 정해지지 않은 입력이라 거절한다. 못 찾은 값은 null로 보낸다."""
     with pytest.raises(ValidationError):
         _extraction(**{field: {"value": [], "quote": "2학년"}})
+
+
+def test_t27_any_with_body_quote_and_from_image_matches():
+    """본문에서 확인된 인용이 있으면 from_image가 함께 있어도 본문 근거로 인정한다(3절 2·6번이 4번보다 먼저)."""
+    v = _run(_extraction(departments={"value": "ANY", "quote": "전 학과", "from_image": True}))
+    r = _reason(v, "departments")
+    assert (r.result, r.source) == ("match", "text_quote")
+    assert v.confidence == "verified"
