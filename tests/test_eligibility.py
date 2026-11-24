@@ -291,3 +291,102 @@ def test_t27_any_with_body_quote_and_from_image_matches():
     r = _reason(v, "departments")
     assert (r.result, r.source) == ("match", "text_quote")
     assert v.confidence == "verified"
+
+
+# ---- mj-06 보강: 7절 표의 케이스를 경계값과 덜 확인된 결과까지 넓힌다 ----
+
+
+def test_t02_department_mismatch_with_text_quote_is_rejected():
+    """본문 인용으로 확인된 다른 학과는 학년·상태와 같이 불가다(4절 1번)."""
+    body = BODY.replace("전 학과", "경영학과")
+    v = _run(_extraction(departments={"value": ["경영학과"], "quote": "경영학과"}), body=body)
+    assert v.verdict == "불가"
+    r = _reason(v, "departments")
+    assert (r.result, r.source) == ("mismatch", "text_quote")
+
+
+@pytest.mark.parametrize(
+    ("grades", "quote", "expected"),
+    [([1, 3], "1·3학년", "불가"), ([2, 3], "2·3학년", "가능")],
+)
+def test_t02_grade_list_matches_only_when_profile_grade_is_listed(grades, quote, expected):
+    body = BODY.replace("2학년", quote)
+    v = _run(_extraction(grades={"value": grades, "quote": quote}), body=body)
+    assert v.verdict == expected
+
+
+def test_t05_start_date_today_is_not_not_yet():
+    """not_yet은 apply_start > today일 때만이다(3절 8번). 시작일 당일은 신청 전이 아니다."""
+    body = BODY.replace("2026.10.15", "2026.10.20")
+    v = _run(_extraction(apply_start={"value": "2026-10-20", "quote": "2026.10.20"}), body=body)
+    assert v.verdict == "가능"
+    assert _reason(v, "apply_start").result != "not_yet"
+
+
+def test_t05b_missing_start_date_is_ignored_in_verdict():
+    """apply_start가 null이어도 판정에서 무시하고 reasons에만 표시한다(4절)."""
+    v = _run(_extraction(apply_start={"value": None}))
+    assert v.verdict == "가능"
+    assert _reason(v, "apply_start").source == "missing"
+
+
+def test_t08_image_match_reasons_tell_to_check_original():
+    """이미지 유래 값이 판정에 쓰이면 reasons에 원본 확인 안내가 들어간다(5절)."""
+    v = _run(_extraction(grades={"value": [2], "from_image": True}))
+    assert v.verdict == "가능"
+    assert v.confidence == "image_unverified"
+    assert "원본" in _reason(v, "grades").evidence
+
+
+def test_t10_confidence_is_image_unverified():
+    v = _run(_extraction(departments={"value": ["경영학과"], "from_image": True}))
+    assert v.confidence == "image_unverified"
+
+
+def test_image_unverified_wins_over_partial():
+    """image_read와 unverified_quote가 함께 있으면 confidence는 image_unverified다(4절)."""
+    v = _run(
+        _extraction(
+            grades={"value": [2], "from_image": True},
+            statuses={"value": ["재학"], "quote": "본문에 없는 인용"},
+        )
+    )
+    assert v.verdict == "확인 필요"
+    assert v.confidence == "image_unverified"
+
+
+def test_t12_quote_is_nfkc_normalized():
+    """전각 숫자 인용도 NFKC 정규화 뒤 본문과 비교한다(3절 7번)."""
+    v = _run(_extraction(grades={"value": [2], "quote": "２학년"}))
+    assert _reason(v, "grades").source == "text_quote"
+    assert v.verdict == "가능"
+
+
+def test_t13_missing_deadline_confidence_is_partial():
+    v = _run(_extraction(apply_end={"value": None}))
+    assert v.confidence == "partial"
+
+
+def test_t14_all_fields_missing_confidence_is_partial():
+    v = _run(Extraction())
+    assert v.confidence == "partial"
+    assert v.deadline is None
+
+
+@pytest.mark.parametrize("missing", ["department", "grade", "status"])
+def test_t19_each_missing_profile_field_is_an_error(missing):
+    profile = {k: val for k, val in PROFILE.items() if k != missing}
+    with pytest.raises(ToolError):
+        parse_profile(profile)
+
+
+@pytest.mark.parametrize("grade", [1, 4])
+def test_t25_profile_grade_boundaries_are_accepted(grade):
+    assert parse_profile({**PROFILE, "grade": grade}).grade == grade
+
+
+def test_t23_allowed_list_check_comes_before_quote_check():
+    """허용 목록 밖의 값은 인용이 본문에 없어도 unrecognized_value다(3절 10번: 인용 검증보다 먼저)."""
+    v = _run(_extraction(statuses={"value": ["복학생"], "quote": "본문에 없는 인용"}))
+    r = _reason(v, "statuses")
+    assert (r.result, r.source) == ("unknown", "unrecognized_value")
