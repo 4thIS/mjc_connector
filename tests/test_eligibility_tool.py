@@ -146,3 +146,114 @@ def test_t29_empty_list_through_mcp_is_a_tool_error(monkeypatch, field):
     assert result.is_error
     assert f"extraction.{field}.value" in text
     assert "비밀학과" not in text and "비밀인용" not in text
+
+
+# ---- mj-08 보강: 명세 1절(서버가 본문·작성일·KST 오늘을 정함)과 T21·T22의 빠진 경우 ----
+
+from datetime import date, datetime, timezone
+
+from common.errors import ParseError
+
+SECRET = Profile(department="컴퓨터보안공학과", grade=3, status="휴학")
+
+
+def test_tool_fetches_the_notice_it_was_given(monkeypatch):
+    """본문은 호출받은 notice_id로 서버가 직접 가져온다(1절)."""
+    asked = []
+
+    def fake(notice_id):
+        asked.append(notice_id)
+        return _detail()
+
+    monkeypatch.setattr(tool.notices, "get_notice", fake)
+    tool.evaluate_eligibility("169:BM1:BD7", PROFILE, EXTRACTION)
+    assert asked == ["169:BM1:BD7"]
+
+
+@pytest.mark.parametrize("error", [FetchError("시험"), ParseError("공지 본문"), ParseError("공지 식별자 형식")])
+def test_t22_every_notice_error_is_raised_not_judged(monkeypatch, error):
+    """조회 단계의 ToolError 계열은 종류와 관계없이 판정 대신 오류로 나온다(5절)."""
+
+    def fail(notice_id):
+        raise error
+
+    monkeypatch.setattr(tool.notices, "get_notice", fail)
+    with pytest.raises(ToolError):
+        tool.evaluate_eligibility("169:BM1:BD1", PROFILE, EXTRACTION)
+
+
+def test_t21_t22_fetch_error_message_and_logs_do_not_hold_profile(monkeypatch, caplog):
+    """조회가 실패한 경로에서도 오류 메시지와 로그에 프로필이 남지 않는다."""
+
+    def fail(notice_id):
+        raise FetchError("시험")
+
+    monkeypatch.setattr(tool.notices, "get_notice", fail)
+    with caplog.at_level(logging.DEBUG), pytest.raises(ToolError) as info:
+        tool.evaluate_eligibility("169:BM1:BD1", SECRET, EXTRACTION)
+    for value in ("컴퓨터보안공학과", "휴학"):
+        assert value not in str(info.value)
+        assert value not in caplog.text
+
+
+def test_t21_t22_fetch_error_through_mcp_does_not_hold_profile(monkeypatch):
+    """MCP로 불렀을 때 조회 실패 결과도 오류이고, 그 문구에 프로필이 없다."""
+    import asyncio
+
+    from mcp.client import Client
+    from mcp.server import MCPServer
+
+    def fail(notice_id):
+        raise FetchError("시험")
+
+    monkeypatch.setattr(tool.notices, "get_notice", fail)
+    server = MCPServer("test")
+    tool.register(server)
+
+    async def call():
+        async with Client(server) as client:
+            return await client.call_tool(
+                "evaluate_eligibility",
+                {"notice_id": _ID, "profile": SECRET.model_dump(), "extraction": EXTRACTION.model_dump()},
+            )
+
+    result = asyncio.run(call())
+    text = result.content[0].text
+    assert result.is_error
+    assert "컴퓨터보안공학과" not in text and "휴학" not in text
+
+
+def _freeze_now(monkeypatch, utc: datetime):
+    class Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return utc.astimezone(tz)
+
+    monkeypatch.setattr(tool, "datetime", Frozen)
+
+
+@pytest.mark.parametrize(
+    ("utc", "verdict"),
+    [
+        (datetime(2026, 10, 31, 14, 59, tzinfo=timezone.utc), "가능"),  # KST 10/31 23:59, 마감 당일
+        (datetime(2026, 10, 31, 15, 0, tzinfo=timezone.utc), "불가"),  # KST 11/01 00:00, 마감 지남
+    ],
+)
+def test_today_is_kst_date(monkeypatch, utc, verdict):
+    """오늘 날짜는 서버가 KST로 정한다(1절). UTC로 정하면 마감 다음 날 0~9시를 당일로 본다."""
+    body = BODY.replace("2099.10.31", "2026.10.31")
+    monkeypatch.setattr(tool.notices, "get_notice", lambda notice_id: _detail().model_copy(update={"body": body}))
+    _freeze_now(monkeypatch, utc)
+    extraction = EXTRACTION.model_copy(
+        update={"apply_end": EXTRACTION.apply_end.model_copy(update={"value": date(2026, 10, 31), "quote": "2026.10.31"})}
+    )
+    assert tool.evaluate_eligibility(_ID, PROFILE, extraction).verdict == verdict
+
+
+@pytest.mark.parametrize("posted_on", ["", "작성일 없음"])
+def test_unreadable_posted_on_still_judges(monkeypatch, posted_on):
+    """작성일을 날짜로 읽지 못해도 판정은 그대로 한다(posted_on은 선택 인자, 1절)."""
+    monkeypatch.setattr(
+        tool.notices, "get_notice", lambda notice_id: _detail().model_copy(update={"posted_on": posted_on})
+    )
+    assert tool.evaluate_eligibility(_ID, PROFILE, EXTRACTION).verdict == "가능"
