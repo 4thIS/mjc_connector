@@ -41,6 +41,14 @@ def test_tool_fetches_body_itself_and_judges(monkeypatch):
     assert v.deadline is not None
 
 
+def test_t40_tool_marks_attachments_as_not_read(monkeypatch):
+    detail = _detail().model_copy(update={"attachments": ["신청서.hwp"]})
+    monkeypatch.setattr(tool.notices, "get_notice", lambda notice_id: detail)
+    v = tool.evaluate_eligibility("169:BM1:BD1", PROFILE, EXTRACTION)
+    assert v.attachment_status == "not_read"
+    assert "첨부" in v.answer_guide
+
+
 def test_t22_fetch_failure_is_an_error_not_a_verdict(monkeypatch):
     def fail(notice_id):
         raise FetchError("시험")
