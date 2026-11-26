@@ -306,7 +306,8 @@ def evaluate(
     """
     # 대상이 첨부나 다른 공지에 있을 수 있으면 추정하지 않는다(명세 3절 11번).
     blocked = None
-    if extraction.refers_elsewhere is not None:
+    elsewhere = extraction.refers_elsewhere
+    if elsewhere is not None and (elsewhere.quote or elsewhere.from_image):
         blocked = _NOT_ASSUMED_ELSEWHERE
     elif has_attachments:
         blocked = _NOT_ASSUMED_ATTACHMENT
@@ -315,7 +316,9 @@ def evaluate(
     elif has_body_images and not extraction.images_checked:
         blocked = _NOT_ASSUMED_IMAGES
     if blocked:
-        assume_grades = assume_departments = enrolled = blocked
+        assume_grades = assume_departments = blocked
+        # 재학 상태는 교내 공지에서만 추정하므로, 그 밖의 공지에는 막은 이유를 붙이지 않는다.
+        enrolled = blocked if extraction.organizer == "school" else None
     else:
         # 이미지가 있는 공지는 AI가 이미지를 읽고 대상이 없다고 확인한 경우에만 추정한다. 확정이 아니다.
         note = _IMAGE_CHECKED_NOTE if has_body_images else ""
@@ -365,7 +368,7 @@ def evaluate(
         )
 
     guide = _GUIDE[verdict]
-    if verdict == "가능" and confidence == "assumed":
+    if verdict == "가능" and any(r.source == "assumed" for r in judged):
         guide += _GUIDE_ASSUMED
     if verdict == "가능" and confidence == "image_unverified":
         guide += _GUIDE_IMAGE

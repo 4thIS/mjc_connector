@@ -44,6 +44,9 @@ def evaluate_eligibility(notice_id: str, profile: Profile, extraction: Extractio
     답할 때는 결과의 answer_guide를 따른다. 설명이 판정보다 앞서 나가면 안 된다(예: "확인 필요"인데
     "참가할 수 있을 것 같다"고 말하지 않는다). attachment_status가 not_read면 첨부도 확인하라고 안내한다.
 
+    공지에 판정 밖의 조건(소득, 나이, 자격증, 증명서 등)이 있는데 other_conditions에 넣지 못했다면,
+    판정이 "가능"이어도 그 조건을 따로 알려 준다.
+
     other_conditions가 있으면 판정은 "확인 필요"다. 조건을 근거와 함께 알려 주고,
     - 학생이 이 대화에서 이미 밝힌 정보로 그 조건을 판단할 수 있으면 그 조건에 대해서만 판단해 알려 준다.
     - 밝힌 정보가 없으면 학생이 직접 확인하도록 안내한다. 나이·소득 같은 정보를 먼저 묻지 않는다.

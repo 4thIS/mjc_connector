@@ -267,3 +267,35 @@ def test_t49_assumed_guide_does_not_say_everyone():
     v = _run({"organizer": "school", "apply_end": END})
     assert "전체 대상" not in v.answer_guide
     assert "추정" in v.answer_guide
+
+
+# 두 번째 자가 리뷰 반영
+
+
+def test_t52_assumed_guide_survives_image_confidence():
+    v = evaluate(
+        parse_profile(PROFILE),
+        Extraction.model_validate({"organizer": "school", "images_checked": True, "apply_end": END}),
+        BODY,
+        TODAY,
+        has_body_images=True,
+    )
+    assert v.confidence == "image_unverified"
+    assert "추정" in v.answer_guide and "확정이 아니" in v.answer_guide
+
+
+def test_t53_blocked_status_evidence_only_for_school_notices():
+    v = evaluate(
+        parse_profile(PROFILE),
+        Extraction.model_validate({"organizer": "external", "apply_end": END}),
+        BODY,
+        TODAY,
+        has_attachments=True,
+    )
+    assert _reason(v, "statuses").evidence == "공지에서 찾지 못했습니다."
+    assert "첨부" in _reason(v, "grades").evidence
+
+
+def test_t54_empty_refers_elsewhere_does_not_block():
+    v = _run({"organizer": "school", "apply_end": END, "refers_elsewhere": {}})
+    assert v.verdict == "가능"
