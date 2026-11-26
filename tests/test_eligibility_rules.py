@@ -182,3 +182,88 @@ def test_t44_answer_guide_matches_verdict_level():
     body = "대상: 3학년. " + BODY
     rejected = _run({"grades": {"value": [3], "quote": "3학년"}, "apply_end": END}, body=body)
     assert "사유" in rejected.answer_guide
+
+
+# 자가 리뷰 반영: 대상이 어딘가 적혀 있을 수 있으면 추정하지 않는다
+
+
+def test_t45_null_value_with_target_quote_is_not_assumed():
+    body = "대상: 3학년. " + BODY
+    v = _run({"organizer": "school", "grades": {"value": None, "quote": "대상: 3학년"}, "apply_end": END}, body=body)
+    assert v.verdict == "확인 필요"
+    r = _reason(v, "grades")
+    assert (r.result, r.source) == ("unknown", "unrecognized_value")
+    v = _run({"organizer": "school", "grades": {"value": None, "from_image": True}, "apply_end": END})
+    assert _reason(v, "grades").source == "unrecognized_value"
+
+
+def _run_unread(**flags):
+    return evaluate(
+        parse_profile(PROFILE),
+        Extraction.model_validate({"organizer": "school", "apply_end": END}),
+        BODY,
+        TODAY,
+        **flags,
+    )
+
+
+def test_t46_truncated_body_blocks_assumption():
+    v = _run_unread(body_truncated=True)
+    assert v.verdict == "확인 필요"
+    assert "잘려" in _reason(v, "grades").evidence
+
+
+def test_t47_body_images_block_assumption_until_ai_checks_them():
+    v = _run_unread(has_body_images=True)
+    assert v.verdict == "확인 필요"
+    assert "이미지" in _reason(v, "departments").evidence
+
+
+def test_t50_checked_images_allow_assumption_but_not_definitively():
+    v = evaluate(
+        parse_profile(PROFILE),
+        Extraction.model_validate({"organizer": "school", "images_checked": True, "apply_end": END}),
+        BODY,
+        TODAY,
+        has_body_images=True,
+    )
+    assert v.verdict == "가능"
+    assert v.confidence == "image_unverified"
+    assert _reason(v, "grades").source == "assumed"
+    assert "이미지" in _reason(v, "grades").evidence
+    assert "확정이 아니" in v.answer_guide
+
+
+def test_t51_image_values_guide_says_not_definitive():
+    body = "대상: 전 학과. " + BODY
+    v = _run(
+        {
+            "grades": {"value": [2], "from_image": True},
+            "departments": {"value": "ANY", "quote": "전 학과"},
+            "statuses": {"value": ["재학"], "from_image": True},
+            "apply_end": END,
+        },
+        body=body,
+    )
+    assert (v.verdict, v.confidence) == ("가능", "image_unverified")
+    assert "확정이 아니" in v.answer_guide
+
+
+def test_t48_other_condition_sources_lower_confidence():
+    body = "대상: 전 학년 전 학과 재학생. " + BODY
+    fields = {
+        "grades": {"value": "ANY", "quote": "전 학년"},
+        "departments": {"value": "ANY", "quote": "전 학과"},
+        "statuses": {"value": ["재학"], "quote": "재학생"},
+        "apply_end": END,
+    }
+    v = _run({**fields, "other_conditions": [{"text": "소득 8분위", "quote": "본문에 없는 문장"}]}, body=body)
+    assert v.confidence == "partial"
+    v = _run({**fields, "other_conditions": [{"text": "미혼", "from_image": True}]}, body=body)
+    assert v.confidence == "image_unverified"
+
+
+def test_t49_assumed_guide_does_not_say_everyone():
+    v = _run({"organizer": "school", "apply_end": END})
+    assert "전체 대상" not in v.answer_guide
+    assert "추정" in v.answer_guide

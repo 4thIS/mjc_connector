@@ -49,6 +49,15 @@ def test_t40_tool_marks_attachments_as_not_read(monkeypatch):
     assert "첨부" in v.answer_guide
 
 
+@pytest.mark.parametrize("update", [{"truncated": True}, {"body_images": ["https://mjcms.mjc.ac.kr/a.png"]}])
+def test_t46_t47_tool_passes_truncation_and_images(monkeypatch, update):
+    detail = _detail().model_copy(update=update)
+    monkeypatch.setattr(tool.notices, "get_notice", lambda notice_id: detail)
+    extraction = EXTRACTION.model_copy(update={"grades": EXTRACTION.grades.model_copy(update={"value": None, "quote": None})})
+    v = tool.evaluate_eligibility("169:BM1:BD1", PROFILE, extraction)
+    assert v.verdict == "확인 필요"
+
+
 def test_t22_fetch_failure_is_an_error_not_a_verdict(monkeypatch):
     def fail(notice_id):
         raise FetchError("시험")

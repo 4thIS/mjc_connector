@@ -87,6 +87,10 @@ class Extraction(BaseModel):
         default_factory=list,
         description="학년·학과·재학 상태·신청 기간 밖의 자격 조건(나이, 소득, 성적, 이전 수혜, 혼인 등). 없으면 빈 목록",
     )
+    images_checked: bool = Field(
+        default=False,
+        description="본문 이미지를 모두 읽고(get_notice_image) 대상 문구를 확인했으면 true. 이미지가 없으면 무시된다",
+    )
     refers_elsewhere: _Evidence | None = Field(
         default=None,
         description="대상·조건을 다른 공지나 별도 문서에서 보라고 적혀 있으면 그 문장(quote 또는 from_image). 없으면 null",
@@ -183,6 +187,10 @@ _ASSUMED_ALL = {
 _ASSUMED_ENROLLED = "교내 공지에 대상 재학 상태가 적혀 있지 않아 재학생 대상으로 봤습니다(추정)."
 _NOT_ASSUMED_ATTACHMENT = "공지에 적혀 있지 않고, 읽지 않은 첨부 파일에 있을 수 있어 대상을 추정하지 않았습니다."
 _NOT_ASSUMED_ELSEWHERE = "공지가 대상·조건을 다른 곳에서 보라고 안내해, 대상을 추정하지 않았습니다."
+_NOT_ASSUMED_TRUNCATED = "공지 본문이 길어 잘려서, 잘린 부분에 대상이 있을 수 있어 추정하지 않았습니다."
+_NOT_ASSUMED_IMAGES = "공지 본문에 이미지가 있는데 이미지를 읽었다는 표시가 없어, 이미지에 대상이 있을 수 있어 추정하지 않았습니다."
+_IMAGE_CHECKED_NOTE = " 본문 이미지는 AI가 읽은 결과에 기대므로 원본 이미지를 확인하세요."
+_NOT_MAPPED = "대상을 적은 근거는 있지만 값으로 옮기지 못해 판정에 쓰지 않았습니다."
 
 # 판정 수준에 맞는 답변 표현. 설명이 판정보다 앞서 나가지 않게 한다(명세 5절)
 _GUIDE = {
@@ -191,8 +199,9 @@ _GUIDE = {
     "확인 필요": "\"할 수 있다\", \"해당될 것 같다\"처럼 가능을 암시하는 표현을 쓰지 않는다. "
     "무엇이 확인되지 않았는지와 확인할 곳(원문·담당 부서)을 전한다.",
 }
-_GUIDE_ASSUMED = " 공지에 대상이 적혀 있지 않아 전체 대상으로 본 추정이라는 점을 함께 말한다."
+_GUIDE_ASSUMED = " 공지에 적혀 있지 않은 대상을 규칙으로 추정한 결과라는 점과, reasons의 추정 근거를 함께 말한다."
 _GUIDE_ATTACHMENT = " 첨부 파일은 읽지 않았으니 첨부도 확인하라고 안내한다."
+_GUIDE_IMAGE = " 이미지에서 읽은 내용에 기댄 결과라 확정이 아니므로, 원본 이미지를 직접 확인하라고 안내한다."
 
 
 def _membership(
@@ -208,6 +217,9 @@ def _membership(
     None이면 null은 unknown이고, 문자열이면 추정하지 않은 이유를 담은 unknown이다.
     """
     if condition.value is None:
+        # 근거(인용·이미지)를 달았는데 값이 없으면 대상이 적혀 있다는 뜻이다. 추정하지 않는다.
+        if condition.quote or condition.from_image:
+            return Reason(field=name, result="unknown", source="unrecognized_value", evidence=_NOT_MAPPED)
         if assumed is None or isinstance(assumed, str):
             evidence = assumed or "공지에서 찾지 못했습니다."
             return Reason(field=name, result="unknown", source="missing", evidence=evidence)
@@ -285,6 +297,8 @@ def evaluate(
     today: date,
     posted_on: date | None = None,
     has_attachments: bool = False,
+    body_truncated: bool = False,
+    has_body_images: bool = False,
 ) -> Verdict:
     """프로필과 추출값으로 공지 해당 여부를 판정한다.
 
@@ -296,12 +310,18 @@ def evaluate(
         blocked = _NOT_ASSUMED_ELSEWHERE
     elif has_attachments:
         blocked = _NOT_ASSUMED_ATTACHMENT
+    elif body_truncated:
+        blocked = _NOT_ASSUMED_TRUNCATED
+    elif has_body_images and not extraction.images_checked:
+        blocked = _NOT_ASSUMED_IMAGES
     if blocked:
         assume_grades = assume_departments = enrolled = blocked
     else:
-        assume_grades = ("ANY", _ASSUMED_ALL["grades"])
-        assume_departments = ("ANY", _ASSUMED_ALL["departments"])
-        enrolled = (["재학"], _ASSUMED_ENROLLED) if extraction.organizer == "school" else None
+        # 이미지가 있는 공지는 AI가 이미지를 읽고 대상이 없다고 확인한 경우에만 추정한다. 확정이 아니다.
+        note = _IMAGE_CHECKED_NOTE if has_body_images else ""
+        assume_grades = ("ANY", _ASSUMED_ALL["grades"] + note)
+        assume_departments = ("ANY", _ASSUMED_ALL["departments"] + note)
+        enrolled = (["재학"], _ASSUMED_ENROLLED + note) if extraction.organizer == "school" else None
     reasons = [
         _membership("grades", extraction.grades, profile.grade, None, body, assume_grades),
         _membership(
@@ -325,11 +345,13 @@ def evaluate(
     else:
         verdict = "가능"
 
-    if any(r.source == "image_read" for r in judged):
+    sources = [r.source for r in judged] + [c.source for c in others]
+    image_assumed = has_body_images and "assumed" in sources
+    if "image_read" in sources or image_assumed:
         confidence = "image_unverified"
-    elif any(r.source in ("missing", "unverified_quote", "unrecognized_value") for r in judged):
+    elif any(s in ("missing", "unverified_quote", "unrecognized_value") for s in sources):
         confidence = "partial"
-    elif any(r.source == "assumed" for r in judged):
+    elif "assumed" in sources:
         confidence = "assumed"
     else:
         confidence = "verified"
@@ -345,6 +367,8 @@ def evaluate(
     guide = _GUIDE[verdict]
     if verdict == "가능" and confidence == "assumed":
         guide += _GUIDE_ASSUMED
+    if verdict == "가능" and confidence == "image_unverified":
+        guide += _GUIDE_IMAGE
     if has_attachments:
         guide += _GUIDE_ATTACHMENT
     return Verdict(
