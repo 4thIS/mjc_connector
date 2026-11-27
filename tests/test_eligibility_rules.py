@@ -336,3 +336,15 @@ def test_t57_blank_quote_is_never_a_body_quote():
 def test_t58_other_condition_without_evidence_says_no_evidence():
     v = _run({"organizer": "school", "apply_end": END, "other_conditions": [{"text": "차상위계층"}]})
     assert v.other_conditions[0].evidence.startswith("근거가 없습니다")
+
+
+def test_t59_blank_other_condition_text_is_ignored():
+    v = _run({"organizer": "school", "apply_end": END, "other_conditions": [{"text": "  "}]})
+    assert v.verdict == "가능"
+    assert v.other_conditions == []
+
+
+def test_t60_assumed_note_is_kept_when_check_needed():
+    v = _run({"organizer": "school", "apply_end": END, "other_conditions": [{"text": "미혼", "from_image": True}]})
+    assert v.verdict == "확인 필요"
+    assert "추정" in v.answer_guide

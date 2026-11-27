@@ -47,6 +47,14 @@ def test_t40_tool_marks_attachments_as_not_read(monkeypatch):
     v = tool.evaluate_eligibility("169:BM1:BD1", PROFILE, EXTRACTION)
     assert v.attachment_status == "not_read"
     assert "첨부" in v.answer_guide
+    # 대상이 비어 있으면 첨부 때문에 추정하지 않아야 한다(도구가 첨부 여부를 넘기는지 확인)
+    empty = Extraction.model_validate({"organizer": "school", "apply_end": EXTRACTION.apply_end.model_dump()})
+    v = tool.evaluate_eligibility("169:BM1:BD1", PROFILE, empty)
+    assert v.verdict == "확인 필요"
+    for reason in v.reasons:
+        if reason.field in ("grades", "departments", "statuses"):
+            assert (reason.result, reason.source) == ("unknown", "missing")
+            assert "첨부" in reason.evidence
 
 
 @pytest.mark.parametrize("update", [{"truncated": True}, {"body_images": ["https://mjcms.mjc.ac.kr/a.png"]}])

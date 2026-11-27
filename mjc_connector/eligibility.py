@@ -105,9 +105,9 @@ class Reason(BaseModel):
 
 
 class OtherConditionResult(BaseModel):
-    text: str
-    source: Source
-    evidence: str
+    text: str = Field(description="판정에 넣지 않은 자격 조건(AI가 공지에서 뽑은 그대로)")
+    source: Source = Field(description="근거 종류: text_quote(본문 인용 확인) / image_read(이미지에서 읽음) / unverified_quote(확인 안 됨)")
+    evidence: str = Field(description="본문 인용, 이미지 확인 안내, 또는 근거가 확인되지 않았다는 안내")
 
 
 class Deadline(BaseModel):
@@ -205,7 +205,7 @@ _GUIDE = {
     "확인 필요": "\"할 수 있다\", \"해당될 것 같다\"처럼 가능을 암시하는 표현을 쓰지 않는다. "
     "무엇이 확인되지 않았는지와 확인할 곳(원문·담당 부서)을 전한다.",
 }
-_GUIDE_ASSUMED = " 공지에 적혀 있지 않은 대상을 규칙으로 추정한 결과라는 점과, reasons의 추정 근거를 함께 말한다."
+_GUIDE_ASSUMED = " 대상 일부는 공지에 적혀 있지 않아 규칙으로 추정했으니, 그 점과 reasons의 추정 근거를 함께 말한다."
 _GUIDE_ATTACHMENT = " 첨부 파일은 읽지 않았으니 첨부도 확인하라고 안내한다."
 _GUIDE_IMAGE = " 이미지에서 읽은 내용에 기댄 결과라 확정이 아니므로, 원본 이미지를 직접 확인하라고 안내한다."
 
@@ -351,7 +351,8 @@ def evaluate(
         _date("apply_end", extraction.apply_end, today, body),
     ]
     judged = [r for r in reasons if r.field in _JUDGED]
-    others = [_other_condition(c, body) for c in extraction.other_conditions]
+    # 내용 없는 조건(공백)은 학생에게 전할 것이 없으므로 판정에서 뺀다.
+    others = [_other_condition(c, body) for c in extraction.other_conditions if c.text.strip()]
 
     if any(r.result == "mismatch" and r.source == "text_quote" for r in judged):
         verdict = "불가"
@@ -384,7 +385,7 @@ def evaluate(
         )
 
     guide = _GUIDE[verdict]
-    if verdict == "가능" and any(r.source == "assumed" for r in judged):
+    if verdict != "불가" and any(r.source == "assumed" for r in judged):
         guide += _GUIDE_ASSUMED
     if verdict == "가능" and confidence == "image_unverified":
         guide += _GUIDE_IMAGE
