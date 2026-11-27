@@ -184,7 +184,7 @@ def test_t44_answer_guide_matches_verdict_level():
     assert "사유" in rejected.answer_guide
 
 
-# 자가 리뷰 반영: 대상이 어딘가 적혀 있을 수 있으면 추정하지 않는다
+# 대상이 근거·잘린 본문·이미지에 있을 수 있으면 추정하지 않는다(명세 3절 11번)
 
 
 def test_t45_null_value_with_target_quote_is_not_assumed():
@@ -269,7 +269,7 @@ def test_t49_assumed_guide_does_not_say_everyone():
     assert "추정" in v.answer_guide
 
 
-# 두 번째 자가 리뷰 반영
+# 추정 안내 문구, 교내 공지가 아닐 때의 근거, 근거 없는 참조 표시
 
 
 def test_t52_assumed_guide_survives_image_confidence():
@@ -298,4 +298,17 @@ def test_t53_blocked_status_evidence_only_for_school_notices():
 
 def test_t54_empty_refers_elsewhere_does_not_block():
     v = _run({"organizer": "school", "apply_end": END, "refers_elsewhere": {}})
+    assert v.verdict == "가능"
+
+
+def test_t55_null_value_with_quote_not_in_body_is_unverified():
+    v = _run({"organizer": "school", "grades": {"value": None, "quote": "대상: 4학년"}, "apply_end": END})
+    r = _reason(v, "grades")
+    assert (r.result, r.source) == ("unknown", "unverified_quote")
+
+
+def test_t56_blank_quote_counts_as_no_evidence_but_blank_reference_does_not_block():
+    v = _run({"organizer": "school", "grades": {"value": None, "quote": "  "}, "apply_end": END})
+    assert _reason(v, "grades").source == "assumed"
+    v = _run({"organizer": "school", "apply_end": END, "refers_elsewhere": {"quote": " "}})
     assert v.verdict == "가능"

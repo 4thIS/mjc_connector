@@ -25,10 +25,11 @@ def evaluate_eligibility(notice_id: str, profile: Profile, extraction: Extractio
          이미지에서만 읽은 "제한 없음"은 "ANY"로 인정되지 않는다.
        - 공지에 대상이 적혀 있지 않으면 null로 둔다(빈 목록은 보내지 않는다). 추측해서 채우지 않는다.
          서버가 학년·학과는 전체 대상으로, 교내 공지(organizer가 school)의 재학 상태는 재학생 대상으로 보고
-         그렇게 봤다는 근거를 붙인다(첨부가 있거나 본문이 잘렸으면 추정하지 않는다).
+         그렇게 봤다는 근거를 붙인다. 첨부가 있거나, 본문이 잘렸거나, refers_elsewhere에 근거가 있거나,
+         본문 이미지를 읽지 않았으면(images_checked가 false) 추정하지 않는다.
+       - 대상이 적혀 있는데 값으로 옮기지 못했다면 value는 null로 두고 그 문장을 quote에 넣는다(추정하지 않는다).
        - 본문 이미지가 있는 공지는 get_notice_image로 이미지를 모두 읽고, 대상을 확인했으면 images_checked를
-         true로 둔다. 읽지 않으면 대상을 추정하지 않는다. 이미지에 기댄 결과는 확정이 아니다.
-         대상이 적혀 있는데 값으로 옮기지 못했다면 value는 null로 두고 그 문장을 quote에 넣는다(추정하지 않는다).
+         true로 둔다. 이미지에 기댄 결과는 확정이 아니다.
        - 학과는 list_departments의 정식 이름으로, 재학 상태는 재학/휴학/졸업예정으로만 쓴다.
        - organizer: 학교가 운영하는 프로그램이면 "school", 외부 기관 프로그램이면 "external", 모르면 null.
        - refers_elsewhere: 대상·조건을 다른 공지나 별도 문서에서 보라고 적혀 있으면 그 문장(quote 또는 from_image).

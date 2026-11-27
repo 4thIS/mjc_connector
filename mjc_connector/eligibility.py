@@ -148,6 +148,11 @@ def parse_profile(raw: dict) -> Profile:
     return profile
 
 
+def _has_evidence(condition: _Evidence) -> bool:
+    """공백만 있는 인용은 근거로 보지 않는다."""
+    return bool(condition.quote and condition.quote.strip()) or condition.from_image
+
+
 def _normalize(text: str) -> str:
     return "".join(unicodedata.normalize("NFKC", text).split())
 
@@ -218,7 +223,14 @@ def _membership(
     """
     if condition.value is None:
         # 근거(인용·이미지)를 달았는데 값이 없으면 대상이 적혀 있다는 뜻이다. 추정하지 않는다.
-        if condition.quote or condition.from_image:
+        if _has_evidence(condition):
+            if _source(condition, body) == "unverified_quote":
+                return Reason(
+                    field=name,
+                    result="unknown",
+                    source="unverified_quote",
+                    evidence="근거 인용이 공지 본문에서 확인되지 않아 판정에 쓰지 않았습니다.",
+                )
             return Reason(field=name, result="unknown", source="unrecognized_value", evidence=_NOT_MAPPED)
         if assumed is None or isinstance(assumed, str):
             evidence = assumed or "공지에서 찾지 못했습니다."
@@ -307,7 +319,7 @@ def evaluate(
     # 대상이 첨부나 다른 공지에 있을 수 있으면 추정하지 않는다(명세 3절 11번).
     blocked = None
     elsewhere = extraction.refers_elsewhere
-    if elsewhere is not None and (elsewhere.quote or elsewhere.from_image):
+    if elsewhere is not None and _has_evidence(elsewhere):
         blocked = _NOT_ASSUMED_ELSEWHERE
     elif has_attachments:
         blocked = _NOT_ASSUMED_ATTACHMENT
