@@ -321,16 +321,18 @@ def evaluate(
     posted_on(공지 작성일)은 날짜 교차 검증에서 연도를 보완할 때 쓸 자리다. 아직 쓰지 않는다.
     """
     # 대상이 첨부나 다른 공지에 있을 수 있으면 추정하지 않는다(명세 3절 11번).
-    blocked = None
     elsewhere = extraction.refers_elsewhere
-    if elsewhere is not None and _has_evidence(elsewhere):
-        blocked = _NOT_ASSUMED_ELSEWHERE
-    elif has_attachments:
-        blocked = _NOT_ASSUMED_ATTACHMENT
-    elif body_truncated:
-        blocked = _NOT_ASSUMED_TRUNCATED
-    elif has_body_images and not extraction.images_checked:
-        blocked = _NOT_ASSUMED_IMAGES
+    reasons_blocked = []
+    # 참조 문장은 본문에서 확인됐거나 이미지에서 읽은 경우에만 추정을 막는다(지어낸 참조로 막지 않게).
+    if elsewhere is not None and _has_evidence(elsewhere) and _source(elsewhere, body) != "unverified_quote":
+        reasons_blocked.append(_NOT_ASSUMED_ELSEWHERE)
+    if has_attachments:
+        reasons_blocked.append(_NOT_ASSUMED_ATTACHMENT)
+    if body_truncated:
+        reasons_blocked.append(_NOT_ASSUMED_TRUNCATED)
+    if has_body_images and not extraction.images_checked:
+        reasons_blocked.append(_NOT_ASSUMED_IMAGES)
+    blocked = " ".join(reasons_blocked) or None
     if blocked:
         assume_grades = assume_departments = blocked
         # 재학 상태는 교내 공지에서만 추정하므로, 그 밖의 공지에는 막은 이유를 붙이지 않는다.
@@ -367,7 +369,9 @@ def evaluate(
 
     sources = [r.source for r in judged] + [c.source for c in others]
     image_assumed = has_body_images and "assumed" in sources
-    if "image_read" in sources or image_assumed:
+    if verdict == "불가":
+        confidence = "verified"  # "불가"는 본문 인용으로 확인된 불일치로만 나온다(4절 1번)
+    elif "image_read" in sources or image_assumed:
         confidence = "image_unverified"
     elif any(s in ("missing", "unverified_quote", "unrecognized_value") for s in sources):
         confidence = "partial"

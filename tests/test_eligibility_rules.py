@@ -348,3 +348,28 @@ def test_t60_assumed_note_is_kept_when_check_needed():
     v = _run({"organizer": "school", "apply_end": END, "other_conditions": [{"text": "미혼", "from_image": True}]})
     assert v.verdict == "확인 필요"
     assert "추정" in v.answer_guide
+
+
+def test_t61_unverified_reference_does_not_block_assumption():
+    v = _run({"organizer": "school", "apply_end": END, "refers_elsewhere": {"quote": "본문에 없는 참조 문장"}})
+    assert v.verdict == "가능"
+
+
+def test_t62_all_block_reasons_are_listed():
+    v = evaluate(
+        parse_profile(PROFILE),
+        Extraction.model_validate({"organizer": "school", "apply_end": END}),
+        BODY,
+        TODAY,
+        has_attachments=True,
+        body_truncated=True,
+    )
+    evidence = _reason(v, "grades").evidence
+    assert "첨부" in evidence and "잘려" in evidence
+
+
+def test_t63_rejection_by_body_quote_is_verified_even_with_assumptions():
+    body = "신청 마감일(11월 5일 17:00)"
+    v = _run({"organizer": "school", "apply_end": {"value": "2026-11-05", "quote": "신청 마감일(11월 5일 17:00)"}}, body=body)
+    assert v.verdict == "불가"
+    assert v.confidence == "verified"
