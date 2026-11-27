@@ -159,7 +159,8 @@ def _normalize(text: str) -> str:
 
 def _source(condition: _Evidence, body: str) -> Source:
     """값을 믿을 근거가 무엇인지 정한다(명세 3절 2~6번)."""
-    if condition.quote and _normalize(condition.quote) in _normalize(body):
+    # 공백만 있는 인용은 정규화하면 빈 문자열이라 어디에나 "있게" 되므로 근거로 보지 않는다.
+    if condition.quote and condition.quote.strip() and _normalize(condition.quote) in _normalize(body):
         return "text_quote"
     if condition.from_image:
         return "image_read"
@@ -294,7 +295,10 @@ def _date(name: str, condition: DateCondition, today: date, body: str) -> Reason
 
 def _other_condition(condition: OtherCondition, body: str) -> OtherConditionResult:
     source = _source(condition, body)
-    note = "근거 인용이 공지 본문에서 확인되지 않았습니다. 원문을 확인하세요."
+    if _has_evidence(condition):
+        note = "근거 인용이 공지 본문에서 확인되지 않았습니다. 원문을 확인하세요."
+    else:
+        note = "근거가 없습니다. 원문에서 이 조건을 확인하세요."
     return OtherConditionResult(text=condition.text, source=source, evidence=_evidence(condition, source, note))
 
 

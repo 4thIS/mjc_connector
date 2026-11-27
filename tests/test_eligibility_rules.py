@@ -312,3 +312,27 @@ def test_t56_blank_quote_counts_as_no_evidence_but_blank_reference_does_not_bloc
     assert _reason(v, "grades").source == "assumed"
     v = _run({"organizer": "school", "apply_end": END, "refers_elsewhere": {"quote": " "}})
     assert v.verdict == "가능"
+
+
+def test_t57_blank_quote_is_never_a_body_quote():
+    body = "대상: 전 학과. " + BODY
+    v = _run(
+        {
+            "grades": {"value": [3], "quote": " "},
+            "departments": {"value": "ANY", "quote": "  "},
+            "statuses": {"value": ["재학"], "quote": "전 학과"},
+            "apply_end": END,
+            "other_conditions": [{"text": "소득 8분위 이하", "quote": " "}],
+        },
+        body=body,
+    )
+    assert v.verdict == "확인 필요"
+    assert _reason(v, "grades").source == "unverified_quote"
+    assert _reason(v, "departments").source == "unverified_quote"
+    assert v.other_conditions[0].source == "unverified_quote"
+    assert v.confidence == "partial"
+
+
+def test_t58_other_condition_without_evidence_says_no_evidence():
+    v = _run({"organizer": "school", "apply_end": END, "other_conditions": [{"text": "차상위계층"}]})
+    assert v.other_conditions[0].evidence.startswith("근거가 없습니다")
