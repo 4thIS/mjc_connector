@@ -33,6 +33,20 @@ def test_binds_only_inside_the_server():
     assert server.HOST == "127.0.0.1"
 
 
+def test_survey_instructions_only_when_url_is_set():
+    assert server.instructions("") is None
+    text = server.instructions("https://forms.example/abc")
+    assert "https://forms.example/abc" in text and "한 번만" in text
+
+
+def test_tools_are_instrumented():
+    from mjc_connector import usage
+
+    for tool in server.mcp._tool_manager.list_tools():
+        assert tool.fn.__wrapped__ is not None, tool.name
+    assert usage.instrument
+
+
 def test_public_hosts_are_added_to_local_hosts():
     settings = server.transport_security("mjc-mcp.example.dev, other.example.dev")
     assert settings.enable_dns_rebinding_protection

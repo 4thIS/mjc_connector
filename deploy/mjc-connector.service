@@ -13,6 +13,9 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PORT=8001
 Environment=MJC_CACHE_DIR=/var/cache/mjc
 Environment=MJC_PUBLIC_HOSTS=mjc-mcp.hyeon02.dev
+Environment=MJC_USAGE_LOG=/var/cache/mjc/usage.jsonl
+# 설문 주소처럼 리포에 두지 않는 값은 서버의 이 파일에 적는다(예: MJC_SURVEY_URL=https://...). 없어도 된다.
+EnvironmentFile=-/etc/mjc-connector.env
 # 권한 줄이기: 시스템 파일은 읽기 전용, 쓸 수 있는 곳은 캐시 폴더뿐
 NoNewPrivileges=yes
 ProtectSystem=strict
