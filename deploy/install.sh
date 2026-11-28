@@ -66,6 +66,13 @@ for _ in $(seq 1 30); do
   case "${LISTEN}" in *"127.0.0.1:8001 "*) break ;; esac
   sleep 1
 done
+# 포트에 떠 있는 것이 새 서비스인지 확인한다(옛 서버가 포트를 쥐고 있으면 실패로 본다).
+systemctl is-active --quiet mjc-connector || rollback
+NAME=$(curl -s -m 20 -X POST http://127.0.0.1:8001/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"install-check","version":"0"}}}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["serverInfo"]["name"])') || rollback
+[ "${NAME}" = "mjc-connector" ] || rollback
 TOOLS=$(curl -s -m 20 -X POST http://127.0.0.1:8001/mcp   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream'   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'   | python3 -c 'import json,sys; print(sorted(t["name"] for t in json.load(sys.stdin)["result"]["tools"]))') || rollback
 echo "도구: ${TOOLS}"
 ss -ltnp | grep ":8001 " || true
