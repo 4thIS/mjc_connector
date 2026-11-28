@@ -1,6 +1,6 @@
 """원격 MCP 서버 진입점(Streamable HTTP).
 
-로그인 없이 볼 수 있는 공개 정보 도구만 등록한다. 로그인이 필요한 도구(강좌 검색·강의계획서)와
+로그인 없이 볼 수 있는 공개 정보 도구(공지·도서관·학과·학사일정)만 등록한다. 로그인이 필요한 도구(강좌 검색·강의계획서)와
 로그인 도우미는 불러오지 않는다. 여러 학생의 계정·세션을 다루는 문제는 별도 설계가 필요하다.
 
 - 서버 안쪽 주소(127.0.0.1)에만 열고, 공개는 앞단의 터널이 맡는다.
@@ -18,7 +18,7 @@ import sys
 
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
-from tools import departments, library_seats, notices
+from tools import academic_calendar, departments, library_seats, notices
 
 HOST = "127.0.0.1"
 LOCAL_HOSTS = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
@@ -28,6 +28,7 @@ mcp = MCPServer("mjc-connector")
 library_seats.register(mcp)
 notices.register(mcp)
 departments.register(mcp)
+academic_calendar.register(mcp)
 
 
 def transport_security(public_hosts: str | None = None) -> TransportSecuritySettings:

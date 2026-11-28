@@ -8,7 +8,7 @@ from mcp.client import Client
 
 from mjc_connector import server
 
-EXPECTED_TOOLS = {"search_notices", "get_notice", "get_library_seats", "list_departments"}
+EXPECTED_TOOLS = {"search_notices", "get_notice", "get_library_seats", "list_departments", "get_academic_calendar"}
 
 
 def test_exports_only_public_tools():
