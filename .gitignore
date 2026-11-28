@@ -8,3 +8,7 @@ Thumbs.db
 .cache/
 
 __pycache__/
+
+.venv/
+*.egg-info/
+build/

@@ -1,0 +1,33 @@
+[Unit]
+Description=MJC connector remote MCP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mjc
+Group=mjc
+ExecStart=/opt/mjc/venv/bin/python -X utf8 -m mjc_connector.server
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PORT=8001
+Environment=MJC_CACHE_DIR=/var/cache/mjc
+Environment=MJC_PUBLIC_HOSTS=mjc-mcp.hyeon02.dev
+# 권한 줄이기: 시스템 파일은 읽기 전용, 쓸 수 있는 곳은 캐시 폴더뿐
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadWritePaths=/var/cache/mjc
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

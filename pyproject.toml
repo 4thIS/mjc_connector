@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mjc-connector"
+version = "0.1.0"
+description = "명지전문대 공지 해당 여부 판정과 원격 MCP 서버"
+readme = "README.md"
+requires-python = ">=3.14"
+# MCP 도구는 hackathon_mjc_mcp를 커밋 단위로 고정해 가져온다. 올릴 때는 이 커밋만 바꾼다.
+dependencies = [
+    "hackathon-mjc-mcp @ git+https://github.com/4thIS/hackathon_mjc_mcp@1c2c8aad1dfb65fc6546e793628c4cfd7c3ad886",
+]
+
+[project.optional-dependencies]
+test = ["pytest==9.1.1"]
+
+[tool.setuptools]
+packages = ["mjc_connector"]
