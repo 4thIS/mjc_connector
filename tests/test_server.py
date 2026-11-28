@@ -8,7 +8,7 @@ from mcp.client import Client
 
 from mjc_connector import server
 
-EXPECTED_TOOLS = {"search_notices", "get_notice", "get_library_seats", "list_departments"}
+EXPECTED_TOOLS = {"search_notices", "get_notice", "get_library_seats", "list_departments", "evaluate_eligibility"}
 
 
 def test_exports_only_public_tools():
@@ -38,3 +38,18 @@ def test_public_hosts_are_added_to_local_hosts():
     assert settings.enable_dns_rebinding_protection
     assert settings.allowed_hosts == server.LOCAL_HOSTS + ["mjc-mcp.example.dev", "other.example.dev"]
     assert server.transport_security("").allowed_hosts == server.LOCAL_HOSTS
+
+
+def test_eligibility_tool_hides_input_values_in_argument_errors():
+    """판정 도구는 등록할 때 인자 검증 오류에서 입력값을 숨기도록 감싼다(T21)."""
+
+    async def call():
+        async with Client(server.mcp) as client:
+            return await client.call_tool(
+                "evaluate_eligibility",
+                {"notice_id": "1:BM1:BD1", "profile": {"department": "비밀학과", "grade": 9, "status": "재학"}, "extraction": {}},
+            )
+
+    result = asyncio.run(call())
+    assert result.is_error
+    assert "비밀학과" not in result.content[0].text
