@@ -35,7 +35,8 @@ find "${APP}" -type f -exec chmod 640 {} +
 echo "== 2. 설치"
 [ -x "${VENV}/bin/python" ] || python3 -m venv "${VENV}"
 "${VENV}/bin/pip" install --quiet --upgrade pip
-"${VENV}/bin/pip" install --quiet --upgrade "${APP}"
+# 버전 번호가 같아도 고정 커밋이 바뀌면 새 코드가 깔리도록 강제로 다시 설치한다.
+"${VENV}/bin/pip" install --quiet --upgrade --force-reinstall "${APP}"
 chown -R root:root "${VENV}"
 chmod -R o-w "${VENV}"
 install -d -m 750 -o mjc -g mjc /var/cache/mjc
@@ -51,13 +52,21 @@ systemctl enable mjc-connector >/dev/null
 systemctl restart mjc-connector
 
 echo "== 4. 확인"
+rollback() {
+  echo "새 서비스가 응답하지 않습니다. 새 서비스를 끄고 1단계 시연 서버를 다시 켭니다." >&2
+  systemctl disable --now mjc-connector >/dev/null 2>&1 || true
+  if systemctl list-unit-files mjc-mcp.service >/dev/null 2>&1; then
+    systemctl enable --now mjc-mcp >/dev/null 2>&1 || true
+  fi
+  echo "원인 확인: journalctl -u mjc-connector -n 50 --no-pager" >&2
+  exit 1
+}
 for _ in $(seq 1 30); do
-  ss -ltn | grep -q "127.0.0.1:8001 " && break
+  LISTEN=$(ss -ltn)
+  case "${LISTEN}" in *"127.0.0.1:8001 "*) break ;; esac
   sleep 1
 done
-curl -s -m 20 -X POST http://127.0.0.1:8001/mcp \
-  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
-  | python3 -c 'import json,sys; print("도구:", sorted(t["name"] for t in json.load(sys.stdin)["result"]["tools"]))'
+TOOLS=$(curl -s -m 20 -X POST http://127.0.0.1:8001/mcp   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream'   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'   | python3 -c 'import json,sys; print(sorted(t["name"] for t in json.load(sys.stdin)["result"]["tools"]))') || rollback
+echo "도구: ${TOOLS}"
 ss -ltnp | grep ":8001 " || true
 echo "상태: systemctl status mjc-connector   기록: journalctl -u mjc-connector -n 50 --no-pager"
