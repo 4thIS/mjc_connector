@@ -20,14 +20,17 @@ from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from tools import departments, library_seats, notices
 
+from mjc_connector import notice_image
+
 HOST = "127.0.0.1"
 LOCAL_HOSTS = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
 LOCAL_ORIGINS = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
 
-mcp = MCPServer("mjc-connector")
+mcp = MCPServer("mjc-connector", extensions=[notice_image.apps])
 library_seats.register(mcp)
 notices.register(mcp)
 departments.register(mcp)
+notice_image.register(mcp)
 
 
 def transport_security(public_hosts: str | None = None) -> TransportSecuritySettings:
